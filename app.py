@@ -12,10 +12,9 @@ app = Flask(__name__)
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+JWT_SECRET = os.getenv("JWT_SECRET")
 
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
-
-SECRET_KEY = "mysecretkey"
 
 
 # ---------------- REGISTER ---------------- #
@@ -25,18 +24,18 @@ def register():
 
     data = request.get_json()
 
+    first_name = data.get("first_name")
+    last_name = data.get("last_name")
     email = data.get("email")
+    phone = data.get("phone")
+    country = data.get("country")
+    info = data.get("info")
     password = data.get("password")
 
     if not email or not password:
         return jsonify({
             "error": "Email and password required"
         }), 400
-
-    hashed_password = bcrypt.hashpw(
-        password.encode("utf-8"),
-        bcrypt.gensalt()
-    ).decode("utf-8")
 
     existing_user = supabase.table("users") \
         .select("*") \
@@ -48,8 +47,18 @@ def register():
             "error": "User already exists"
         }), 400
 
+    hashed_password = bcrypt.hashpw(
+        password.encode("utf-8"),
+        bcrypt.gensalt()
+    ).decode("utf-8")
+
     supabase.table("users").insert({
+        "first_name": first_name,
+        "last_name": last_name,
         "email": email,
+        "phone": phone,
+        "country": country,
+        "info": info,
         "password": hashed_password
     }).execute()
 
@@ -90,12 +99,20 @@ def login():
 
     token = jwt.encode({
         "email": user["email"],
-        "exp": datetime.datetime.utcnow() + datetime.timedelta(hours=24)
-    }, SECRET_KEY, algorithm="HS256")
+        "exp": datetime.datetime.utcnow() + datetime.timedelta(days=1)
+    }, JWT_SECRET, algorithm="HS256")
 
     return jsonify({
         "message": "Login successful",
-        "token": token
+        "token": token,
+        "user": {
+            "first_name": user["first_name"],
+            "last_name": user["last_name"],
+            "email": user["email"],
+            "phone": user["phone"],
+            "country": user["country"],
+            "info": user["info"]
+        }
     })
 
 
@@ -117,12 +134,24 @@ def profile():
 
         decoded = jwt.decode(
             token,
-            SECRET_KEY,
+            JWT_SECRET,
             algorithms=["HS256"]
         )
 
+        response = supabase.table("users") \
+            .select("*") \
+            .eq("email", decoded["email"]) \
+            .execute()
+
+        user = response.data[0]
+
         return jsonify({
-            "email": decoded["email"]
+            "first_name": user["first_name"],
+            "last_name": user["last_name"],
+            "email": user["email"],
+            "phone": user["phone"],
+            "country": user["country"],
+            "info": user["info"]
         })
 
     except:
